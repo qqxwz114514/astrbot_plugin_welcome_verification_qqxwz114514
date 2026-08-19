@@ -1,0 +1,178 @@
+{
+    "white_groups": {
+        "description": "群白名单",
+        "type": "list",
+        "hint": "填写需要启用本插件的群号，如: [123456, 789012]；留空则所有群生效",
+        "default": []
+    },
+    "recall_wrong_message": {
+        "description": "验证答错或答非所问时是否撤回用户消息",
+        "type": "bool",
+        "hint": "需要机器人是群管理员/群主才有权限撤回他人消息；默认开启",
+        "default": true
+    },
+    "welcome_text": {
+        "description": "全局欢迎文本，支持 {user_name} 变量",
+        "type": "string",
+        "default": "欢迎 {user_name} 加入本群！"
+    },
+    "enable_welcome_image": {
+        "description": "是否发送欢迎图片",
+        "type": "bool",
+        "default": true
+    },
+    "welcome_image": {
+        "description": "欢迎图片路径（本地绝对路径或http/https链接，推荐放在data/目录下）",
+        "type": "string",
+        "default": "https://t.alcy.cc/moe"
+    },
+    "group_configs": {
+        "description": "群组自定义配置（可在列表中添加、编辑、删除群组配置）",
+        "type": "template_list",
+        "default": [],
+        "templates": {
+            "group_config": {
+                "name": "群组配置",
+                "hint": "为指定群组设置独立的欢迎文本和图片",
+                "items": {
+                    "group_id": {
+                        "description": "群组ID（群号）",
+                        "type": "string",
+                        "hint": "输入群号，如：123456789"
+                    },
+                    "welcome_text": {
+                        "description": "欢迎文本（留空使用全局）",
+                        "type": "string",
+                        "hint": "支持 {user_name} 变量，留空则使用全局配置"
+                    },
+                    "enable_welcome_image": {
+                        "description": "启用欢迎图片",
+                        "type": "bool",
+                        "hint": "是否发送欢迎图片，留空继承全局设置",
+                        "default": null
+                    },
+                    "welcome_image": {
+                        "description": "欢迎图片URL/路径（留空使用全局）",
+                        "type": "string",
+                        "hint": "本地绝对路径或网络URL，留空则使用全局配置。推荐放在 data/ 目录下"
+                    },
+                    "question_bank": {
+                        "description": "自定义题库文件名（留空使用全局）",
+                        "type": "string",
+                        "hint": "如：math.json，留空则使用全局题库或自动生成"
+                    }
+                }
+            }
+        }
+    },
+    "enable_verification": {
+        "description": "是否开启入群验证",
+        "type": "bool",
+        "default": true
+    },
+    "verification_timeout": {
+        "description": "主验证超时时间（秒）",
+        "type": "int",
+        "default": 300
+    },
+    "verification_max_attempts": {
+        "description": "主验证最大尝试次数",
+        "type": "int",
+        "default": 3
+    },
+    "verification_question_format": {
+        "description": "主验证问题格式，支持 {question} 变量",
+        "type": "string",
+        "default": "请回答：{question} = ?"
+    },
+    "verification_correct_message": {
+        "description": "主验证成功消息",
+        "type": "string",
+        "default": "验证通过，欢迎入群！"
+    },
+    "verification_failed_message": {
+        "description": "主验证失败提示，支持 {remaining} 变量",
+        "type": "string",
+        "default": "答案错误，您还有 {remaining} 次机会。"
+    },
+    "verification_ban_message": {
+        "description": "主验证失败且未开启二级验证时的踢出提示",
+        "type": "string",
+        "default": "您已超过最大尝试次数，将被移出群聊。"
+    },
+    "secondary_verification_enabled": {
+        "description": "是否启用二级验证（管理员命令审批）",
+        "type": "bool",
+        "default": true
+    },
+    "secondary_verification_timeout": {
+        "description": "二级验证等待管理员决策的超时时间（秒）",
+        "type": "int",
+        "default": 60
+    },
+    "secondary_verification_prompt": {
+        "description": "发送给管理员的提示文本，支持 {user_name}, {user_id}, {pass_cmd}, {kick_cmd}, {timeout}",
+        "type": "string",
+        "default": "用户 {user_name}({user_id}) 未通过入群验证，请管理员/群主使用以下命令处理：\n{pass_cmd} @用户 - 允许入群\n{kick_cmd} @用户 - 移出群聊\n超时时间 {timeout} 秒。"
+    },
+    "pass_command": {
+        "description": "允许入群的命令关键词",
+        "type": "string",
+        "default": "wv pass"
+    },
+    "kick_command": {
+        "description": "踢出入群的命令关键词",
+        "type": "string",
+        "default": "wv kick"
+    },
+    "pass_success_message": {
+        "description": "pass命令执行成功后的回复文本",
+        "type": "string",
+        "default": "已允许该用户入群"
+    },
+    "kick_success_message": {
+        "description": "kick命令执行成功后的回复文本",
+        "type": "string",
+        "default": "已移出该用户"
+    },
+    "timeout_kick_enabled": {
+        "description": "是否启用超时踢人（踢人前等待管理员取消）",
+        "type": "bool",
+        "default": true
+    },
+    "timeout_kick_delay": {
+        "description": "超时踢人等待时间（秒）",
+        "type": "int",
+        "default": 30
+    },
+    "timeout_kick_warning_message": {
+        "description": "即将踢人的提示文本，支持 {user_name}, {delay}, {cancel_command}",
+        "type": "string",
+        "default": "用户 {user_name} 验证失败，将在 {delay} 秒后被移出群聊。如需取消，请管理员发送：{cancel_command} @用户(有空格)"
+    },
+    "timeout_kick_cancel_command": {
+        "description": "取消踢人的命令关键词",
+        "type": "string",
+        "default": "wv cancel"
+    },
+    "timeout_kick_cancel_message": {
+        "description": "取消踢人后的提示文本，支持 {user_name}",
+        "type": "string",
+        "default": "已取消踢出 {user_name}"
+    },
+    "timeout_kick_immediate_message": {
+        "description": "当超时踢人关闭时，直接踢人前的提示文本",
+        "type": "string",
+        "default": "验证失败，您即将被移出群聊"
+    },
+    "no_permission_prompt": {
+        "description": "机器人无管理员权限时，@管理员的提示文本，支持 {user_name}, {user_id}, {group_id}",
+        "type": "string",
+        "default": "用户 {user_name}({user_id}) 未通过入群验证，但我没有管理员权限无法处理，请管理员手动处理"
+    },
+    "secondary_timeout_auto_kick_message": {
+        "description": "二级验证超时后自动踢人的提醒文本，支持 {user_name}, {user_id}",
+        "type": "string",
+        "default": "用户 {user_name} 未在时间内得到处理，已自动移出群聊"
+    }
+}
