@@ -96,9 +96,9 @@
         "default": "答案错误，您还有 {remaining} 次机会。"
     },
     "verification_ban_message": {
-        "description": "主验证失败且未开启二级验证时的踢出提示",
+        "description": "验证失败（次数耗尽）时禁言用户的通知文本",
         "type": "string",
-        "default": "您已超过最大尝试次数，将被移出群聊。"
+        "default": "您已超过最大尝试次数，已被禁言，请等待管理员处理。"
     },
     "secondary_verification_enabled": {
         "description": "是否启用二级验证（管理员命令审批）",

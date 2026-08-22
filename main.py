@@ -12,11 +12,11 @@ from astrbot.core.star.star_tools import StarTools
 
 
 @register(
-    "astrbot_plugin_welcome_verification",
-    "月凌",
+    "astrbot_plugin_welcome_verification_qqxwz114514",
+    "qqxwz114514",
     "入群欢迎与验证插件，支持群组自定义配置",
-    "2.8.1",
-    repo="https://github.com/qiyueling2716/astrbot_plugin_welcome_verification"
+    "1.0.2",
+    repo="https://github.com/qqxwz114514/astrbot_plugin_welcome_verification_qqxwz114514"
 )
 class WelcomeVerificationPlugin(Star):
     def __init__(self, context: Context, config: dict):
@@ -30,6 +30,7 @@ class WelcomeVerificationPlugin(Star):
         self.verification_tasks: Dict[str, asyncio.Task] = {}
         self._lock = asyncio.Lock()
         self._kicking_users: Set[str] = set()  # 防止重复踢人
+        self._banning_users: Set[str] = set()  # 防止重复禁言/解禁
 
         self.data_dir: Path = StarTools.get_data_dir("welcome_verification")
         self.warehouse_dir = self.data_dir / "warehouse"
@@ -423,6 +424,9 @@ class WelcomeVerificationPlugin(Star):
             if task_to_cancel and not task_to_cancel.done():
                 task_to_cancel.cancel()
 
+            # 管理员同意入群 → 解除禁言，恢复正常发言
+            await self._unban_user(event, target_id, group_id)
+
             success_msg = self.config.get("pass_success_message", "已允许该用户入群")
             await event.send(event.plain_result(success_msg))
             try:
@@ -486,6 +490,10 @@ class WelcomeVerificationPlugin(Star):
 
             if task_to_cancel and not task_to_cancel.done():
                 task_to_cancel.cancel()
+                # 取消踢人 = 保留该用户 → 解除禁言并清除失败标记
+                await self._unban_user(event, target_id, group_id)
+                async with self._lock:
+                    self.user_states.pop(key, None)
                 await event.send(event.plain_result("已取消踢人操作"))
             else:
                 await event.send(event.plain_result("该用户没有等待踢人的任务"))
@@ -679,7 +687,30 @@ class WelcomeVerificationPlugin(Star):
 
     async def _handle_verification_failed(self, event: AstrMessageEvent, user_id: str, group_id: int | str, has_permission: bool):
         user_name = await self._get_user_display_name(event, user_id, group_id)
-        if not self.config.get("secondary_verification_enabled", True):
+        secondary_enabled = self.config.get("secondary_verification_enabled", True)
+
+        # 只有处理失败（次数耗尽）才走到这里，此时禁言用户，防止等待窗口内继续刷屏
+        if has_permission:
+            if secondary_enabled:
+                # 二级验证路径：禁言时长 = 等待管理员决策超时 + 120s（保险）
+                ban_duration = self.config.get("secondary_verification_timeout", 60) + 120
+            else:
+                # 超时踢人路径：禁言时长 = 超时踢人等待时间 + 120s（保险）
+                ban_duration = self.config.get("timeout_kick_delay", 30) + 120
+            await self._ban_user(event, user_id, group_id, ban_duration)
+            ban_msg = self.config.get(
+                "verification_ban_message",
+                "您已超过最大尝试次数，已被禁言，请等待管理员处理。"
+            )
+            await event.send(event.plain_result(ban_msg))
+            # 标记失败等待期，_check_answer 据此做撤回兜底
+            key = f"{group_id}:{user_id}"
+            async with self._lock:
+                state = self.user_states.get(key)
+                if state:
+                    state["failed"] = True
+
+        if not secondary_enabled:
             if has_permission:
                 await self._schedule_timeout_kick(event, user_id, user_name, group_id)
             else:
@@ -758,7 +789,8 @@ class WelcomeVerificationPlugin(Star):
                 "user_id": user_id,
                 "secondary_expire": expire_time,
                 "pending_decision": True,
-                "user_name": user_name
+                "user_name": user_name,
+                "failed": True
             }
 
         async def wait_for_decision():
@@ -841,11 +873,16 @@ class WelcomeVerificationPlugin(Star):
 
         future_to_set = None
         is_correct = None
-        send_prompt = False
+        recall_fallback = False
 
         async with self._lock:
             state = self.user_states.get(key)
-            if not state or "future" not in state:
+            if not state:
+                return
+            if "future" not in state:
+                # 验证失败等待期：仅撤回兜底，不扣次数（次数已耗尽）
+                if state.get("failed") and self.config.get("recall_wrong_message", True):
+                    recall_fallback = True
                 return
             if state.get("expire_time") and asyncio.get_event_loop().time() > state["expire_time"]:
                 return
@@ -861,15 +898,15 @@ class WelcomeVerificationPlugin(Star):
                         future_to_set = future
                         is_correct = user_answer == correct_answer
                     except ValueError:
-                        send_prompt = True
+                        # 非数字内容同样视为答错，计入尝试次数（防止广告刷屏无限消耗）
+                        future_to_set = future
+                        is_correct = False
                 else:
                     future_to_set = future
                     is_correct = user_input == correct_answer
 
-        if send_prompt:
-            if self.config.get("recall_wrong_message", True):
-                await self._recall_message(event)
-            await event.send(event.plain_result("请输入数字答案"))
+        if recall_fallback:
+            await self._recall_message(event)
 
         if future_to_set is not None:
             if not is_correct and self.config.get("recall_wrong_message", True):
@@ -952,6 +989,8 @@ class WelcomeVerificationPlugin(Star):
 
         if not await self._is_member_in_group(event, group_id, user_id):
             logger.info(f"跳过踢人: 用户 {user_id} 已不在群 {group_id}")
+            async with self._lock:
+                self.user_states.pop(key, None)
             return
 
         kick_success = await self._kick_user(event, user_id)
@@ -961,6 +1000,10 @@ class WelcomeVerificationPlugin(Star):
                 await event.send(event.plain_result(f"已移出用户 {user_name}"))
             else:
                 logger.warning(f"踢人未生效: 用户 {user_id} 仍在群 {group_id}")
+
+        # 清理失败等待期状态（清除 failed 标记，停止撤回兜底）
+        async with self._lock:
+            self.user_states.pop(key, None)
 
     async def _check_bot_admin(self, event: AstrMessageEvent, group_id: int | str) -> bool:
         if event.get_platform_name() != "aiocqhttp":
@@ -1015,6 +1058,71 @@ class WelcomeVerificationPlugin(Star):
             return False
         finally:
             self._kicking_users.discard(key)
+
+    async def _ban_user(self, event: AstrMessageEvent, user_id: str, group_id: int | str, duration: int) -> bool:
+        """禁言用户（需机器人有群管理员权限，仅 aiocqhttp 平台）
+
+        NapCat OneBot V11: set_group_ban(group_id, user_id, duration)，duration 单位秒，0 = 解除禁言
+        """
+        if event.get_platform_name() != "aiocqhttp":
+            logger.warning(f"当前平台不支持禁言操作，无法禁言用户 {user_id}")
+            return False
+
+        actual_group_id = group_id or event.message_obj.group_id
+        if not actual_group_id:
+            logger.error(f"无法获取群ID，禁言失败: user_id={user_id}")
+            return False
+
+        key = f"{actual_group_id}:{user_id}"
+        if key in self._banning_users:
+            return False
+
+        self._banning_users.add(key)
+        try:
+            await event.bot.api.call_action(
+                'set_group_ban',
+                group_id=int(actual_group_id),
+                user_id=int(user_id),
+                duration=duration
+            )
+            logger.info(f"已禁言用户 {user_id} {duration} 秒")
+            return True
+        except Exception as e:
+            logger.error(f"禁言用户 {user_id} 失败: {e}")
+            return False
+        finally:
+            self._banning_users.discard(key)
+
+    async def _unban_user(self, event: AstrMessageEvent, user_id: str, group_id: int | str) -> bool:
+        """解除禁言（duration=0 即解禁，需机器人有群管理员权限，仅 aiocqhttp 平台）"""
+        if event.get_platform_name() != "aiocqhttp":
+            logger.warning(f"当前平台不支持禁言操作，无法解除禁言 {user_id}")
+            return False
+
+        actual_group_id = group_id or event.message_obj.group_id
+        if not actual_group_id:
+            logger.error(f"无法获取群ID，解除禁言失败: user_id={user_id}")
+            return False
+
+        key = f"{actual_group_id}:{user_id}"
+        if key in self._banning_users:
+            return False
+
+        self._banning_users.add(key)
+        try:
+            await event.bot.api.call_action(
+                'set_group_ban',
+                group_id=int(actual_group_id),
+                user_id=int(user_id),
+                duration=0
+            )
+            logger.info(f"已解除禁言用户 {user_id}")
+            return True
+        except Exception as e:
+            logger.error(f"解除禁言用户 {user_id} 失败: {e}")
+            return False
+        finally:
+            self._banning_users.discard(key)
 
     def _generate_question(self):
         while True:

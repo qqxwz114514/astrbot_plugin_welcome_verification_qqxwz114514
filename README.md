@@ -38,7 +38,7 @@
 
 ```
 cd data/plugins
-git clone https://github.com/qqxwz114514/astrbot_plugin_welcome_verification_qqxwz.git
+git clone https://github.com/qqxwz114514/astrbot_plugin_welcome_verification_qqxwz114514.git
 ```
 
 2. 重启 AstrBot 或在 WebUI 的插件管理页面中点击"重载插件"
@@ -60,7 +60,7 @@ git clone https://github.com/qqxwz114514/astrbot_plugin_welcome_verification_qqx
 | `verification_question_format` | string | 请回答：{question} = ? | 验证问题格式，支持 `{question}` 变量 |
 | `verification_correct_message` | string | 验证通过，欢迎入群！ | 验证成功提示 |
 | `verification_failed_message` | string | 答案错误，您还有 {remaining} 次机会。 | 验证失败提示，支持 `{remaining}` 变量 |
-| `verification_ban_message` | string | 您已超过最大尝试次数，将被移出群聊。 | 验证失败且未开启二级验证时的提示 |
+| `verification_ban_message` | string | 您已超过最大尝试次数，已被禁言，请等待管理员处理。 | 验证失败（次数耗尽）时禁言用户的通知文本 |
 | `secondary_verification_enabled` | bool | true | 是否启用二级验证（管理员审批） |
 | `secondary_verification_timeout` | int | 60 | 二级验证等待管理员决策的超时时间（秒） |
 | `secondary_verification_prompt` | string | （见配置） | 发送给管理员的提示文本，支持 `{user_name}`, `{user_id}`, `{pass_cmd}`, `{kick_cmd}`, `{timeout}` 变量 |
@@ -137,10 +137,12 @@ wv welcome reset
 3. 用户回答：
 - **回答正确**：发送验证通过消息，流程结束
 - **回答错误/答非所问**：自动撤回该用户消息，并提示剩余次数（需开启 `recall_wrong_message` 且机器人是管理员）
-- **回答错误/超时**：扣除次数，次数用尽进入二级验证
-4. 二级验证：
-- **机器人有管理员权限**：@ 所有管理员+群主，提供 `wv pass @用户` 和 `wv kick @用户` 命令，超时自动踢人
-- **机器人无管理员权限**：@ 所有管理员+群主提醒手动处理，不执行踢人操作
+- **回答错误/超时**：扣除次数，次数用尽进入失败处理
+4. 失败处理（次数耗尽时立即禁言）：
+- **机器人有管理员权限**：立即禁言该用户（禁言时长 = 对应等待时间 + 120 秒），并 @ 所有管理员+群主，提供 `wv pass @用户` 和 `wv kick @用户` 命令
+  - 管理员 `wv pass @用户`：解除禁言，恢复正常发言
+  - 管理员 `wv kick @用户` 或不处理：超时后自动踢出
+- **机器人无管理员权限**：@ 所有管理员+群主提醒手动处理，不执行禁言/踢人操作
 
 ### 管理命令
 
@@ -152,7 +154,7 @@ wv welcome reset
 | `wv default` | 恢复随机生成数学题 | 管理员/群主 |
 | `wv pass @用户` | 同意用户入群（二级验证时使用） | 管理员/群主 |
 | `wv kick @用户` | 踢出任意用户（任何时候可用） | 管理员/群主 |
-| `wv cancel @用户` | 取消即将执行的踢人 | 管理员/群主 |
+| `wv cancel @用户` | 取消即将执行的踢人（同时解除禁言） | 管理员/群主 |
 
 ### 自定义题库
 
@@ -171,12 +173,35 @@ wv welcome reset
 ## 注意事项
 
 - 本插件仅支持 aiocqhttp（OneBot V11）平台（如 NapCat、LLOneBot）
-- 机器人需要拥有群管理员权限才能执行踢人和撤回他人消息操作
-- 验证过程中成员输入非数字内容不计入尝试次数（数学题模式下）
+- 机器人需要拥有群管理员权限才能执行踢人、禁言和撤回他人消息操作
+- 验证过程中成员输入非数字内容同样计入尝试次数（数学题模式下，答错/非数字均扣一次机会）
+- 验证失败（次数耗尽）后机器人会立即禁言该用户（需管理员权限），禁言时长 = 对应等待时间 + 120 秒；管理员 `wv pass`/`wv cancel` 处理后解除禁言
+- 验证过程中（次数未耗尽）不会禁言用户
 - 机器人不是群管理员/群主时，该群入群处理（欢迎+验证+撤回）会被直接跳过
 - 建议给机器人管理员权限以获得最佳体验，否则需要管理员手动处理验证失败的用户
 
 ## 更新日志
+
+### v1.0.2 (二次开发更新)
+
+#### ✨ 新增：验证失败立即禁言
+
+- **禁言**：3 次机会用完后（仅处理失败时）立即禁言该用户，防止等待窗口内刷屏
+  - 二级验证路径：禁言时长 = `secondary_verification_timeout`（秒）+ 120 秒
+  - 超时踢人路径：禁言时长 = `timeout_kick_delay`（秒）+ 120 秒
+- **解禁**：管理员 `wv pass` 同意入群 → 解除禁言恢复正常发言；`wv cancel` 取消踢人 → 同样解除禁言
+- **撤回兜底**：验证失败等待期内继续撤回该用户消息（不扣次数），防止禁言调用失败
+
+#### 🐛 修复
+
+- 修复机会用完后撤回失效的问题
+- 启用原未使用的 `verification_ban_message` 配置作为禁言通知文案
+
+### v1.0.1 (二次开发更新)
+
+#### 🐛 修复
+
+- **非数字输入计入尝试次数**：验证期间输入非数字内容（如广告、乱码）不再只警告，而是与答错同等处理扣除一次机会；次数耗尽后按原有逻辑进入二级验证/踢人，防止广告刷屏无限消耗
 
 ### v1.0.0 (二次开发首版)
 
@@ -281,7 +306,7 @@ wv welcome reset
 - **原作者**：月凌
 
 GitHub:
-- 本仓库：https://github.com/qqxwz114514/astrbot_plugin_welcome_verification_qqxwz
+- 本仓库：https://github.com/qqxwz114514/astrbot_plugin_welcome_verification_qqxwz114514
 - 原作者仓库：https://github.com/qiyueling2716/astrbot_plugin_welcome_verification
 - 原作者主页：https://github.com/oujunhaoyueling
 
