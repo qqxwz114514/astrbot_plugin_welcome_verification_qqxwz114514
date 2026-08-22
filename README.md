@@ -1,0 +1,2 @@
+# astrbot_plugin_welcome_verification_qqxwz114514
+基于月凌的开源插件进行的二次开发的入群验证插件
