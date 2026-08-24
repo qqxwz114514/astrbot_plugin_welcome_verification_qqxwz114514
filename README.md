@@ -1,4 +1,4 @@
-> **⚠️ 二次开发声明**：本插件是基于 [月凌](https://github.com/oujunhaoyueling) 的开源插件 [astrbot_plugin_welcome_verification](https://github.com/qiyueling2716/astrbot_plugin_welcome_verification)（v2.8.1）进行的二次开发。
+> **⚠️ 二次开发声明**：本插件是基于 [月凌](https://github.com/qiyueling2716) 的开源插件 [astrbot_plugin_welcome_verification](https://github.com/qiyueling2716/astrbot_plugin_welcome_verification)（v2.8.1）进行的二次开发。
 > 原插件仓库：https://github.com/qiyueling2716/astrbot_plugin_welcome_verification
 > 原插件作者：月凌（GitHub: https://github.com/oujunhaoyueling）
 > 本仓库为二次开发版本，在原功能基础上新增了群白名单、答错自动撤回、管理员权限前置检查等功能，**代码版权归原作者所有，修改部分版权归二次开发者所有**。
@@ -308,7 +308,7 @@ wv welcome reset
 GitHub:
 - 本仓库：https://github.com/qqxwz114514/astrbot_plugin_welcome_verification_qqxwz114514
 - 原作者仓库：https://github.com/qiyueling2716/astrbot_plugin_welcome_verification
-- 原作者主页：https://github.com/oujunhaoyueling
+- 原作者主页：https://github.com/qiyueling2716
 
 ## 许可证
 
