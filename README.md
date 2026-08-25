@@ -1,6 +1,6 @@
 > **⚠️ 二次开发声明**：本插件是基于 [月凌](https://github.com/qiyueling2716) 的开源插件 [astrbot_plugin_welcome_verification](https://github.com/qiyueling2716/astrbot_plugin_welcome_verification)（v2.8.1）进行的二次开发。
 > 原插件仓库：https://github.com/qiyueling2716/astrbot_plugin_welcome_verification
-> 原插件作者：月凌（GitHub: https://github.com/oujunhaoyueling）
+> 原插件作者：月凌: https://github.com/oujunhaoyueling
 > 本仓库为二次开发版本，在原功能基础上新增了群白名单、答错自动撤回、管理员权限前置检查等功能，**代码版权归原作者所有，修改部分版权归二次开发者所有**。
 >
 > **⚠️ v2.8.0 迁移提醒**：所有命令统一为 `wv` 前缀。`/pass`、`/kick`、`/cancel_kick`、`welcome` 等旧命令已移除，请使用 `wv pass`、`wv kick`、`wv cancel`、`wv welcome` 替代。
