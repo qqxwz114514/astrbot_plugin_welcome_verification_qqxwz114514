@@ -543,6 +543,15 @@ class WelcomeVerificationPlugin(Star):
                     return
 
                 await self._handle_group_increase(event, user_id, group_id)
+            elif notice_type == "group_decrease":
+                user_id = str(raw.get("user_id"))
+                group_id = raw.get("group_id")
+                # 可选：检查白名单
+                if not self._check_whitelist(group_id):
+                    return
+                # 只处理非机器人自身的退群/被踢
+                if user_id != str(event.get_self_id()):
+                    await self._handle_group_decrease(event, user_id, group_id)
 
         elif post_type == "message" and raw.get("message_type") == "group":
             if not self._check_whitelist(event.message_obj.group_id):
@@ -566,6 +575,42 @@ class WelcomeVerificationPlugin(Star):
             task.add_done_callback(lambda t: self._check_task_exception(t, f"验证任务 {group_id}:{user_id}"))
             async with self._lock:
                 self.verification_tasks[f"{group_id}:{user_id}"] = task
+
+    async def _handle_group_decrease(self, event: AstrMessageEvent, user_id: str, group_id: int | str):
+        """处理群成员减少事件（退群或被踢）"""
+        key = f"{group_id}:{user_id}"
+        logger.info(f"用户 {user_id} 离开群 {group_id}，检查是否有进行中的验证任务")
+        
+        tasks_to_cancel = []
+        async with self._lock:
+            # 取消验证任务
+            verification_task = self.verification_tasks.pop(key, None)
+            if verification_task and not verification_task.done():
+                tasks_to_cancel.append(verification_task)
+            # 取消二级验证任务
+            secondary_task = self.secondary_tasks.pop(key, None)
+            if secondary_task and not secondary_task.done():
+                tasks_to_cancel.append(secondary_task)
+            # 取消超时踢人任务
+            timeout_task = self.timeout_kick_tasks.pop(key, None)
+            if timeout_task and not timeout_task.done():
+                tasks_to_cancel.append(timeout_task)
+            # 清理用户状态
+            state = self.user_states.pop(key, None)
+            if state:
+                # 取消 future，防止 _start_verification 中的 wait_for 抛出异常
+                future = state.get("future")
+                if future and not future.done():
+                    future.cancel()
+        
+        # 取消任务
+        for task in tasks_to_cancel:
+            task.cancel()
+        
+        if tasks_to_cancel:
+            logger.info(f"已停止用户 {user_id} 的验证流程（共 {len(tasks_to_cancel)} 个任务）")
+        else:
+            logger.debug(f"用户 {user_id} 没有进行中的验证任务")
 
     async def _handle_message_event(self, event: AstrMessageEvent):
         await self._handle_wv_command(event)
@@ -667,6 +712,12 @@ class WelcomeVerificationPlugin(Star):
                             await self._handle_verification_failed(event, user_id, group_id, has_permission)
                             return
                 except asyncio.TimeoutError:
+                    # 检查用户是否还在群内（超时后检测一次）
+                    if not await self._is_member_in_group(event, group_id, user_id):
+                        logger.info(f"用户 {user_id} 已不在群 {group_id}，停止验证")
+                        async with self._lock:
+                            self.user_states.pop(key, None)
+                        return
                     attempts += 1
                     remaining = max_attempts - attempts
                     if remaining > 0:
@@ -686,6 +737,14 @@ class WelcomeVerificationPlugin(Star):
                 self.verification_tasks.pop(key, None)
 
     async def _handle_verification_failed(self, event: AstrMessageEvent, user_id: str, group_id: int | str, has_permission: bool):
+        # 检查用户是否还在群内
+        if not await self._is_member_in_group(event, group_id, user_id):
+            logger.info(f"用户 {user_id} 已不在群 {group_id}，跳过验证失败处理")
+            # 清理状态
+            key = f"{group_id}:{user_id}"
+            async with self._lock:
+                self.user_states.pop(key, None)
+            return
         user_name = await self._get_user_display_name(event, user_id, group_id)
         secondary_enabled = self.config.get("secondary_verification_enabled", True)
 
